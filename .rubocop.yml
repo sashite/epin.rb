@@ -2,8 +2,6 @@ AllCops:
   # @see https://docs.rubocop.org/rubocop/configuration.html#pre-processing
   Exclude:
   
-    - .DS_Store
-  
     - .rubocop-https---raw-githubusercontent-com-sashite-sashite-rubocop-rb-v1-0-3-config-rubocop-performance-yml
   
     - .rubocop-https---raw-githubusercontent-com-sashite-sashite-rubocop-rb-v1-0-3-config-rubocop-rake-yml
@@ -14,19 +12,7 @@ AllCops:
   
     - .yardoc/
   
-    - coverage/
-  
     - doc/
-  
-    - lib/.DS_Store
-  
-    - lib/sashite/.DS_Store
-  
-    - lib/sashite/pnn/.DS_Store
-  
-    - pkg/
-  
-    - tmp/
   
     - test.rb
     - config/**/*
