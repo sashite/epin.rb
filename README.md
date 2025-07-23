@@ -40,7 +40,6 @@ identifier.state                               # => :normal
 identifier.native?                             # => true
 
 # Create identifiers directly
-identifier = Sashite::Epin.identifier(:K, :first) # => #<Epin::Identifier type=:K side=:first state=:normal native=true>
 identifier = Sashite::Epin::Identifier.new(:R, :second, :enhanced, false) # => #<Epin::Identifier type=:R side=:second state=:enhanced native=false>
 
 # Validate EPIN strings
@@ -159,8 +158,8 @@ Where `<pin>` follows the PIN format: `[<state>]<letter>`
 # Native styles: first=Chess, second=Shōgi
 
 # Native pieces (no derivation suffix)
-white_king = Sashite::Epin.identifier(:K, :first)          # => "K" (Chess king)
-black_king = Sashite::Epin.identifier(:K, :second)         # => "k" (Shōgi king)
+white_king = Sashite::Epin.identifier(:K, :first, :normal, true)          # => "K" (Chess king)
+black_king = Sashite::Epin.identifier(:K, :second, :normal, true)         # => "k" (Shōgi king)
 
 # Foreign pieces (with derivation suffix)
 white_shogi_king = Sashite::Epin.identifier(:K, :first, :normal, false)   # => "K'" (Shōgi king for white)
@@ -215,7 +214,7 @@ foreign_piece.to_s                               # => "r'" (black foreign rook)
 
 - `Sashite::Epin.valid?(epin_string)` - Check if string is valid EPIN notation
 - `Sashite::Epin.parse(epin_string)` - Parse EPIN string into Identifier object
-- `Sashite::Epin.identifier(type, side, state = :normal, native = true)` - Create identifier instance directly
+- `Sashite::Epin.identifier(type, side, state, native)` - Create identifier instance directly
 
 ### Identifier Class
 
@@ -304,7 +303,7 @@ foreign_chess_king.derived?                       # => true
 ### Immutable Transformations
 ```ruby
 # All transformations return new instances
-original = Sashite::Epin.identifier(:K, :first)
+original = Sashite::Epin.identifier(:K, :first, :normal, true)
 enhanced = original.enhance
 derived = original.derive
 flipped = original.flip
@@ -357,8 +356,8 @@ end
 
 # Usage
 board = CrossStyleGameBoard.new(:chess, :shogi)
-board.place("e1", Sashite::Epin.identifier(:K, :first))               # Chess king
-board.place("e8", Sashite::Epin.identifier(:K, :second))              # Shōgi king
+board.place("e1", Sashite::Epin.identifier(:K, :first, :normal, true))  # Chess king
+board.place("e8", Sashite::Epin.identifier(:K, :second, :normal, true)) # Shōgi king
 board.place("d4", Sashite::Epin.identifier(:Q, :first, :normal, false)) # Chess queen using Shōgi style
 
 analysis = board.pieces_by_style_derivation
@@ -409,7 +408,6 @@ def can_promote_in_style?(piece, target_rank, style_rules)
 end
 
 # Usage
-chess_pawn = Sashite::Epin.identifier(:P, :first)
 shogi_pawn = Sashite::Epin.identifier(:P, :first, :normal, false)
 
 style_rules = { native: :chess, foreign: :shogi }

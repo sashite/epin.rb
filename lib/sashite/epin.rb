@@ -20,7 +20,7 @@ module Sashite
   #   "+R'" - First player rook (foreign style, enhanced state)
   #   "-p"  - Second player pawn (native style, diminished state)
   #
-  # See: https://sashite.dev/specs/epin/1.0.0/
+  # @see https://sashite.dev/specs/epin/1.0.0/
   module Epin
     # Check if a string is a valid EPIN notation
     #
@@ -62,7 +62,7 @@ module Sashite
     #   Sashite::Epin.identifier(:K, :first, :normal, true)      # => #<Epin::Identifier type=:K side=:first state=:normal native=true>
     #   Sashite::Epin.identifier(:R, :first, :enhanced, false)   # => #<Epin::Identifier type=:R side=:first state=:enhanced native=false>
     #   Sashite::Epin.identifier(:P, :second, :diminished, true) # => #<Epin::Identifier type=:P side=:second state=:diminished native=true>
-    def self.identifier(type, side, state = Sashite::Pin::Identifier::NORMAL_STATE, native = Identifier::NATIVE)
+    def self.identifier(type, side, state, native)
       Identifier.new(type, side, state, native)
     end
   end

@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+require "simplecov"
+
+SimpleCov.command_name "Unit Tests"
+SimpleCov.start
+
 # Tests for Sashite::Epin (Extended Piece Identifier Notation)
 #
 # Tests the EPIN implementation for Ruby, focusing on the modern object-oriented API
