@@ -9,9 +9,29 @@
 
 ## What is EPIN?
 
-EPIN (Extended Piece Identifier Notation) extends [PIN (Piece Identifier Notation)](https://sashite.dev/specs/pin/1.0.0/) to provide style-aware piece representation in abstract strategy board games. EPIN adds a derivation marker that distinguishes pieces by their style origin, enabling cross-style game scenarios and piece origin tracking.
+EPIN (Extended Piece Identifier Notation) extends [PIN](https://sashite.dev/specs/pin/1.0.0/) by adding a **derivation marker** to track piece style in cross-style games.
 
-This gem implements the [EPIN Specification v1.0.0](https://sashite.dev/specs/epin/1.0.0/), providing a modern Ruby interface with immutable identifier objects and full backward compatibility with PIN while adding style differentiation capabilities.
+**EPIN is simply: PIN + optional style derivation marker (`'`)**
+
+This gem implements the [EPIN Specification v1.0.0](https://sashite.dev/specs/epin/1.0.0/) with a minimal compositional API.
+
+## Core Concept
+
+```ruby
+# EPIN is just PIN + derived flag
+pin = Sashite::Pin.parse("K^")
+epin = Sashite::Epin.new(pin, derived: false)
+
+epin.to_s      # => "K^" (native)
+epin.pin       # => PIN::Identifier instance
+epin.derived?  # => false
+
+# Mark as derived
+derived_epin = epin.mark_derived
+derived_epin.to_s # => "K^'" (derived from opposite side's style)
+```
+
+**That's it.** All piece attributes come from the PIN component.
 
 ## Installation
 
@@ -26,515 +46,608 @@ Or install manually:
 gem install sashite-epin
 ```
 
-## Usage
+## Dependencies
+
+```ruby
+gem "sashite-pin" # Piece Identifier Notation
+```
+
+## Quick Start
 
 ```ruby
 require "sashite/epin"
 
-# Parse EPIN strings into identifier objects
-identifier = Sashite::Epin.parse("K")          # => #<Epin::Identifier type=:K side=:first state=:normal native=true>
-identifier.to_s                                # => "K"
-identifier.type                                # => :K
-identifier.side                                # => :first
-identifier.state                               # => :normal
-identifier.native?                             # => true
+# Parse an EPIN string
+epin = Sashite::Epin.parse("K^'")
+epin.to_s # => "K^'"
 
-# Create identifiers directly
-identifier = Sashite::Epin::Identifier.new(:R, :second, :enhanced, false) # => #<Epin::Identifier type=:R side=:second state=:enhanced native=false>
+# Access five fundamental attributes through PIN component + derived flag
+epin.pin.type          # => :K (Piece Name)
+epin.pin.side          # => :first (Piece Side)
+epin.pin.state         # => :normal (Piece State)
+epin.pin.terminal?     # => true (Terminal Status)
+epin.derived?          # => true (Piece Style: derived vs native)
 
-# Validate EPIN strings
-Sashite::Epin.valid?("K")                      # => true
-Sashite::Epin.valid?("+R'")                    # => true
-Sashite::Epin.valid?("invalid")                # => false
-
-# Style derivation with apostrophe suffix
-native_king = Sashite::Epin.parse("K")         # => #<Epin::Identifier type=:K side=:first state=:normal native=true>
-foreign_king = Sashite::Epin.parse("K'")       # => #<Epin::Identifier type=:K side=:first state=:normal native=false>
-
-native_king.to_s                               # => "K"
-foreign_king.to_s                              # => "K'"
-
-# State manipulation (returns new immutable instances)
-enhanced = identifier.enhance                  # => #<Epin::Identifier type=:K side=:first state=:enhanced native=true>
-enhanced.to_s                                  # => "+K"
-diminished = identifier.diminish               # => #<Epin::Identifier type=:K side=:first state=:diminished native=true>
-diminished.to_s                                # => "-K"
-
-# Style derivation manipulation
-foreign_piece = identifier.derive              # => #<Epin::Identifier type=:K side=:first state=:normal native=false>
-foreign_piece.to_s                             # => "K'"
-back_to_native = foreign_piece.underive        # => #<Epin::Identifier type=:K side=:first state=:normal native=true>
-back_to_native.to_s                            # => "K"
-
-# Side manipulation
-flipped = identifier.flip                      # => #<Epin::Identifier type=:K side=:second state=:normal native=true>
-flipped.to_s                                   # => "k"
-
-# Type manipulation
-queen = identifier.with_type(:Q)               # => #<Epin::Identifier type=:Q side=:first state=:normal native=true>
-queen.to_s                                     # => "Q"
-
-# Style queries
-identifier.native?                             # => true
-foreign_king.derived?                          # => true
-foreign_king.foreign?                          # => true (alias for derived?)
-
-# State queries
-identifier.normal?                             # => true
-enhanced.enhanced?                             # => true
-diminished.diminished?                         # => true
-
-# Side queries
-identifier.first_player?                       # => true
-flipped.second_player?                         # => true
-
-# Attribute access
-identifier.letter                              # => "K"
-enhanced.prefix                                # => "+"
-foreign_king.suffix                            # => "'"
-identifier.suffix                              # => ""
-
-# Type and side comparison
-king1 = Sashite::Epin.parse("K")
-king2 = Sashite::Epin.parse("k")
-queen = Sashite::Epin.parse("Q")
-
-king1.same_type?(king2)                        # => true (both kings)
-king1.same_side?(queen)                        # => true (both first player)
-king1.same_type?(queen)                        # => false (different types)
-
-# Style comparison
-native_king = Sashite::Epin.parse("K")
-foreign_king = Sashite::Epin.parse("K'")
-
-native_king.same_style?(foreign_king) # => false (different derivation)
-
-# Functional transformations can be chained
-pawn = Sashite::Epin.parse("P")
-enemy_foreign_promoted = pawn.flip.derive.enhance # => "+p'" (second player foreign promoted pawn)
+# PIN component is a full PIN::Identifier
+epin.pin.enhanced?     # => false
+epin.pin.letter        # => "K"
 ```
+
+## Basic Usage
+
+### Creating Identifiers
+
+```ruby
+# Parse from string
+epin = Sashite::Epin.parse("K^")      # Native
+epin = Sashite::Epin.parse("K^'")     # Derived
+
+# Create from PIN component
+pin = Sashite::Pin.parse("K^")
+epin = Sashite::Epin.new(pin, derived: false)  # Native
+epin = Sashite::Epin.new(pin, derived: true)   # Derived
+
+# Validate
+Sashite::Epin.valid?("K^")     # => true
+Sashite::Epin.valid?("K^'")    # => true
+Sashite::Epin.valid?("K^''")   # => false (multiple markers)
+```
+
+### Accessing Components
+
+```ruby
+epin = Sashite::Epin.parse("+R^'")
+
+# Get PIN component
+epin.pin                       # => #<Pin::Identifier type=:R state=:enhanced terminal=true>
+epin.pin.to_s                  # => "+R^"
+
+# Check derivation
+epin.derived? # => true
+
+# Serialize
+epin.to_s # => "+R^'"
+```
+
+### Five Fundamental Attributes
+
+All attributes accessible via PIN component + derived flag:
+
+```ruby
+epin = Sashite::Epin.parse("+R^'")
+
+# From PIN component (4 attributes)
+epin.pin.type                  # => :R (Piece Name)
+epin.pin.side                  # => :first (Piece Side)
+epin.pin.state                 # => :enhanced (Piece State)
+epin.pin.terminal?             # => true (Terminal Status)
+
+# From EPIN (5th attribute)
+epin.derived? # => true (Piece Style: native vs derived)
+```
+
+## Transformations
+
+All transformations return new immutable instances:
+
+### Change Derivation Status
+
+```ruby
+epin = Sashite::Epin.parse("K^")
+
+# Mark as derived
+derived = epin.mark_derived
+derived.to_s # => "K^'"
+
+# Mark as native
+native = derived.unmark_native
+native.to_s # => "K^"
+
+# Toggle
+toggled = epin.with_derived(!epin.derived?)
+toggled.to_s # => "K^'"
+```
+
+### Transform via PIN Component
+
+```ruby
+epin = Sashite::Epin.parse("K^'")
+
+# Replace PIN component
+new_pin = epin.pin.with_type(:Q)
+epin.with_pin(new_pin).to_s # => "Q^'"
+
+# Change type
+epin.with_pin(epin.pin.with_type(:Q)).to_s # => "Q^'"
+
+# Change state
+epin.with_pin(epin.pin.with_state(:enhanced)).to_s # => "+K^'"
+
+# Remove terminal marker
+epin.with_pin(epin.pin.with_terminal(false)).to_s # => "K'"
+
+# Change side
+epin.with_pin(epin.pin.flip).to_s # => "k^'"
+```
+
+### Multiple Transformations
+
+```ruby
+epin = Sashite::Epin.parse("K^")
+
+# Transform PIN and derivation
+transformed = epin
+              .with_pin(epin.pin.with_type(:Q).with_state(:enhanced))
+              .mark_derived
+
+transformed.to_s # => "+Q^'"
+```
+
+## Component Queries
+
+Use the PIN component API directly:
+
+```ruby
+epin = Sashite::Epin.parse("+P^'")
+
+# PIN queries (name, side, state, terminal)
+epin.pin.type                  # => :P
+epin.pin.side                  # => :first
+epin.pin.state                 # => :enhanced
+epin.pin.terminal?             # => true
+epin.pin.first_player?         # => true
+epin.pin.enhanced?             # => true
+epin.pin.letter                # => "P"
+epin.pin.prefix                # => "+"
+epin.pin.suffix                # => "^"
+
+# EPIN queries (style)
+epin.derived?                  # => true
+epin.native?                   # => false
+
+# Compare EPINs
+other = Sashite::Epin.parse("+P^")
+epin.pin.same_type?(other.pin)     # => true (both P)
+epin.pin.same_state?(other.pin)    # => true (both enhanced)
+epin.same_derivation?(other)       # => false (different derivation)
+```
+
+## API Reference
+
+### Main Module
+
+```ruby
+# Parse EPIN string
+Sashite::Epin.parse(epin_string) # => Epin::Identifier
+
+# Create from PIN component
+Sashite::Epin.new(pin, derived: false) # => Epin::Identifier
+
+# Validate string
+Sashite::Epin.valid?(epin_string) # => Boolean
+```
+
+### Identifier Class
+
+#### Core Methods (6 total)
+
+```ruby
+# Creation
+Sashite::Epin.new(pin, derived: false) # Create from PIN + derivation flag
+
+# Component access
+epin.pin                        # => PIN::Identifier
+epin.derived?                   # => Boolean
+
+# Serialization
+epin.to_s # => "K^'" or "K^"
+
+# PIN replacement
+epin.with_pin(new_pin) # New EPIN with different PIN
+
+# Derivation transformation
+epin.mark_derived               # Mark as derived (add ')
+epin.unmark_native              # Mark as native (remove ')
+epin.with_derived(boolean)      # Set derivation explicitly
+```
+
+#### Convenience Queries
+
+```ruby
+epin.native?                    # !derived?
+epin.same_derivation?(other)    # Compare derivation status
+```
+
+#### Equality
+
+```ruby
+epin1 == epin2 # True if both PIN and derived flag equal
+```
+
+**That's the entire API.** Everything else uses the PIN component API directly.
 
 ## Format Specification
 
 ### Structure
 ```
-<pin>[<suffix>]
+<pin>[']
 ```
 
-Where `<pin>` follows the PIN format: `[<state>]<letter>`
+Where:
+- `<pin>` is any valid PIN token
+- `'` is the optional derivation marker
 
-### Components
+### Grammar (BNF)
+```bnf
+<epin> ::= <pin> | <pin> "'"
 
-- **PIN part** (`[<state>]<letter>`): Standard PIN notation
-  - **Letter** (`A-Z`, `a-z`): Represents piece type and side
-    - Uppercase: First player pieces
-    - Lowercase: Second player pieces
-  - **State** (optional prefix):
-    - `+`: Enhanced state (promoted, upgraded, empowered)
-    - `-`: Diminished state (weakened, restricted, temporary)
-    - No prefix: Normal state
-
-- **Derivation suffix** (optional):
-  - `'`: Foreign style (piece has opposite side's native style)
-  - No suffix: Native style (piece has current side's native style)
+<pin> ::= ["+" | "-"] <letter> ["^"]
+<letter> ::= "A" | ... | "Z" | "a" | ... | "z"
+```
 
 ### Regular Expression
 ```ruby
-/\A[-+]?[A-Za-z]'?\z/
+/\A[-+]?[A-Za-z]\^?'?\z/
 ```
 
-### Examples
-- `K` - First player king (native style, normal state)
-- `k'` - Second player king (foreign style, normal state)
-- `+R'` - First player rook (foreign style, enhanced state)
-- `-p` - Second player pawn (native style, diminished state)
+## Examples
 
-## Game Examples
-
-### Cross-Style Chess vs. Shōgi
+### Basic Identifiers
 
 ```ruby
-# Match setup: First player uses Chess, Second player uses Shōgi
-# Native styles: first=Chess, second=Shōgi
+# Native pieces (no derivation marker)
+native_king = Sashite::Epin.parse("K^")
+native_king.pin.type          # => :K
+native_king.derived?          # => false
 
-# Native pieces (no derivation suffix)
-white_king = Sashite::Epin.identifier(:K, :first, :normal, true)          # => "K" (Chess king)
-black_king = Sashite::Epin.identifier(:K, :second, :normal, true)         # => "k" (Shōgi king)
+# Derived pieces (with derivation marker)
+derived_king = Sashite::Epin.parse("K^'")
+derived_king.pin.type         # => :K
+derived_king.derived?         # => true
 
-# Foreign pieces (with derivation suffix)
-white_shogi_king = Sashite::Epin.identifier(:K, :first, :normal, false)   # => "K'" (Shōgi king for white)
-black_chess_king = Sashite::Epin.identifier(:K, :second, :normal, false)  # => "k'" (Chess king for black)
+# Enhanced pieces
+enhanced_rook = Sashite::Epin.parse("+R'")
+enhanced_rook.pin.enhanced?   # => true
+enhanced_rook.derived?        # => true
 
-# Promoted pieces in cross-style context
-white_promoted_rook = Sashite::Epin.parse("+R'")  # White shōgi rook promoted to Dragon King
-black_promoted_pawn = Sashite::Epin.parse("+p")   # Black shōgi pawn promoted to Tokin
-
-white_promoted_rook.enhanced?                      # => true
-white_promoted_rook.derived?                       # => true
-black_promoted_pawn.enhanced?                      # => true
-black_promoted_pawn.native?                        # => true
+# Diminished pieces
+diminished_pawn = Sashite::Epin.parse("-p")
+diminished_pawn.pin.diminished?  # => true
+diminished_pawn.native?          # => true
 ```
 
-### Single-Style Games (PIN Compatibility)
+### Cross-Style Scenarios
+
+Assume first player uses Chess style, second player uses Makruk style:
 
 ```ruby
-# Traditional Chess (both players use Chess style)
-# All pieces are native, so EPIN behaves exactly like PIN
+# First player pieces
+chess_king = Sashite::Epin.parse("K^")      # Native Chess king
+makruk_pawn = Sashite::Epin.parse("P'")     # Derived Makruk pawn (foreign)
 
-white_pieces = %w[K Q +R B N P].map { |pin| Sashite::Epin.parse(pin) }
-black_pieces = %w[k q +r b n p].map { |pin| Sashite::Epin.parse(pin) }
+chess_king.native?            # => true (uses own style)
+makruk_pawn.derived?          # => true (uses opponent's style)
 
-white_pieces.all?(&:native?)                      # => true
-black_pieces.all?(&:native?)                      # => true
+# Second player pieces
+makruk_king = Sashite::Epin.parse("k^")     # Native Makruk king
+chess_pawn = Sashite::Epin.parse("p'")      # Derived Chess pawn (foreign)
 
-# EPIN strings match PIN strings for native pieces
-white_pieces.map(&:to_s)                          # => ["K", "Q", "+R", "B", "N", "P"]
-black_pieces.map(&:to_s)                          # => ["k", "q", "+r", "b", "n", "p"]
+makruk_king.native?           # => true
+chess_pawn.derived?           # => true
 ```
 
-### Style Mutation During Gameplay
+### Component Manipulation
 
 ```ruby
-# Simulate capture with style change (Ōgi rules)
-chess_queen = Sashite::Epin.parse("q'") # Black chess queen (foreign for shōgi player)
-captured = chess_queen.flip.with_type(:P).underive # Becomes white native pawn
+# Start with native king
+epin = Sashite::Epin.parse("K^")
 
-chess_queen.to_s                                  # => "q'" (black foreign queen)
-captured.to_s                                     # => "P" (white native pawn)
+# Convert to derived
+derived = epin.mark_derived
+derived.to_s # => "K^'"
 
-# Style derivation changes during gameplay
-shogi_piece = Sashite::Epin.parse("r")           # Black shōgi rook (native)
-foreign_piece = shogi_piece.derive               # Convert to foreign style
-foreign_piece.to_s                               # => "r'" (black foreign rook)
+# Change to queen (keep derivation)
+queen = derived.with_pin(derived.pin.with_type(:Q))
+queen.to_s # => "Q^'"
+
+# Enhance (keep derivation)
+enhanced = derived.with_pin(derived.pin.with_state(:enhanced))
+enhanced.to_s # => "+K^'"
+
+# Change side (keep derivation)
+opponent = derived.with_pin(derived.pin.flip)
+opponent.to_s # => "k^'"
+
+# Back to native
+native = derived.unmark_native
+native.to_s # => "K^"
 ```
 
-## API Reference
-
-### Main Module Methods
-
-- `Sashite::Epin.valid?(epin_string)` - Check if string is valid EPIN notation
-- `Sashite::Epin.parse(epin_string)` - Parse EPIN string into Identifier object
-- `Sashite::Epin.identifier(type, side, state, native)` - Create identifier instance directly
-
-### Identifier Class
-
-#### Creation and Parsing
-- `Sashite::Epin::Identifier.new(type, side, state = :normal, native = true)` - Create identifier instance
-- `Sashite::Epin::Identifier.parse(epin_string)` - Parse EPIN string (same as module method)
-- `Sashite::Epin::Identifier.valid?(epin_string)` - Validate EPIN string (class method)
-
-#### Attribute Access
-- `#type` - Get piece type (symbol :A to :Z, always uppercase)
-- `#side` - Get player side (:first or :second)
-- `#state` - Get state (:normal, :enhanced, or :diminished)
-- `#native` - Get style derivation (true for native, false for foreign)
-- `#letter` - Get letter representation (string, case determined by side)
-- `#prefix` - Get state prefix (string: "+", "-", or "")
-- `#suffix` - Get derivation suffix (string: "'" or "")
-- `#to_s` - Convert to EPIN string representation
-
-#### Style Queries
-- `#native?` - Check if native style (current side's native style)
-- `#derived?` - Check if foreign style (opposite side's native style)
-- `#foreign?` - Alias for `#derived?`
-
-#### State Queries
-- `#normal?` - Check if normal state (no modifiers)
-- `#enhanced?` - Check if enhanced state
-- `#diminished?` - Check if diminished state
-
-#### Side Queries
-- `#first_player?` - Check if first player identifier
-- `#second_player?` - Check if second player identifier
-
-#### State Transformations (immutable - return new instances)
-- `#enhance` - Create enhanced version
-- `#unenhance` - Remove enhanced state
-- `#diminish` - Create diminished version
-- `#undiminish` - Remove diminished state
-- `#normalize` - Remove all state modifiers
-
-#### Style Transformations (immutable - return new instances)
-- `#derive` - Convert to foreign style (add derivation suffix)
-- `#underive` - Convert to native style (remove derivation suffix)
-- `#flip` - Switch player (change side)
-
-#### Attribute Transformations (immutable - return new instances)
-- `#with_type(new_type)` - Create identifier with different type
-- `#with_side(new_side)` - Create identifier with different side
-- `#with_state(new_state)` - Create identifier with different state
-- `#with_derivation(native)` - Create identifier with different derivation
-
-#### Comparison Methods
-- `#same_type?(other)` - Check if same piece type
-- `#same_side?(other)` - Check if same side
-- `#same_state?(other)` - Check if same state
-- `#same_style?(other)` - Check if same style derivation
-- `#==(other)` - Full equality comparison
-
-### Constants
-- `Sashite::Epin::Identifier::NATIVE` - Constant for native style (`true`)
-- `Sashite::Epin::Identifier::FOREIGN` - Constant for foreign style (`false`)
-- `Sashite::Epin::Identifier::DERIVATION_SUFFIX` - Derivation suffix for foreign pieces (`"'"`)
-
-## Advanced Usage
-
-### Style Derivation Examples
+### Working with PIN Component
 
 ```ruby
-# Understanding native vs. foreign pieces
-# In a Chess vs. Shōgi match:
-# - First player native style: Chess
-# - Second player native style: Shōgi
+epin = Sashite::Epin.parse("+R^'")
 
-native_chess_king = Sashite::Epin.parse("K")      # First player native (Chess king)
-foreign_shogi_king = Sashite::Epin.parse("K'")    # First player foreign (Shōgi king)
+# Extract PIN component
+pin = epin.pin # => "+R^"
 
-native_shogi_king = Sashite::Epin.parse("k")      # Second player native (Shōgi king)
-foreign_chess_king = Sashite::Epin.parse("k'")    # Second player foreign (Chess king)
+# Transform PIN
+new_pin = pin.with_type(:B).with_state(:normal) # => "B^"
 
-# Style queries
-native_chess_king.native?                         # => true
-foreign_shogi_king.derived?                       # => true
-native_shogi_king.native?                         # => true
-foreign_chess_king.derived?                       # => true
+# Create new EPIN with transformed PIN
+new_epin = epin.with_pin(new_pin)
+new_epin.to_s # => "B^'"
+
+# Multiple PIN transformations
+complex_pin = pin
+              .with_type(:Q)
+              .with_state(:diminished)
+              .with_terminal(false)
+              .flip
+
+epin.with_pin(complex_pin).to_s # => "-q'"
 ```
 
-### Immutable Transformations
+### Immutability
+
 ```ruby
+original = Sashite::Epin.parse("K^")
+
 # All transformations return new instances
-original = Sashite::Epin.identifier(:K, :first, :normal, true)
-enhanced = original.enhance
-derived = original.derive
-flipped = original.flip
+derived = original.mark_derived
+changed_pin = original.with_pin(original.pin.with_type(:Q))
 
-# Original piece is never modified
-puts original    # => "K"
-puts enhanced    # => "+K"
-puts derived     # => "K'"
-puts flipped     # => "k"
+# Original unchanged
+original.to_s                 # => "K^"
+derived.to_s                  # => "K^'"
+changed_pin.to_s              # => "Q^"
 
-# Transformations can be chained
-result = original.flip.derive.enhance.with_type(:Q)
-puts result # => "+q'"
+# Components are immutable
+pin = original.pin
+pin.frozen?                   # => true
+original.frozen?              # => true
 ```
 
-### Cross-Style Game State Management
-```ruby
-class CrossStyleGameBoard
-  def initialize(first_style, second_style)
-    @first_style = first_style
-    @second_style = second_style
-    @pieces = {}
-  end
+## Attribute Mapping
 
-  def place(square, piece)
-    @pieces[square] = piece
-  end
+EPIN exposes all five fundamental attributes from the Sashité Game Protocol:
 
-  def capture_with_style_change(from_square, to_square, new_type = nil)
-    captured = @pieces[to_square]
-    capturing = @pieces.delete(from_square)
+| Protocol Attribute | EPIN Access | Example |
+|-------------------|-------------|---------|
+| **Piece Name** | `epin.pin.type` | `:K` (King), `:R` (Rook) |
+| **Piece Side** | `epin.pin.side` | `:first`, `:second` |
+| **Piece State** | `epin.pin.state` | `:normal`, `:enhanced`, `:diminished` |
+| **Terminal Status** | `epin.pin.terminal?` | `true`, `false` |
+| **Piece Style** | `epin.derived?` | `false` (native), `true` (derived) |
 
-    return nil unless captured && capturing
+## Design Principles
 
-    # Style mutation: captured piece becomes native to capturing side
-    mutated = captured.flip.underive
-    mutated = mutated.with_type(new_type) if new_type
+### 1. Pure Composition
 
-    @pieces[to_square] = capturing
-    mutated # Return mutated captured piece for hand
-  end
-
-  def pieces_by_style_derivation
-    {
-      native:  @pieces.select { |_, piece| piece.native? },
-      foreign: @pieces.select { |_, piece| piece.derived? }
-    }
-  end
-end
-
-# Usage
-board = CrossStyleGameBoard.new(:chess, :shogi)
-board.place("e1", Sashite::Epin.identifier(:K, :first, :normal, true))  # Chess king
-board.place("e8", Sashite::Epin.identifier(:K, :second, :normal, true)) # Shōgi king
-board.place("d4", Sashite::Epin.identifier(:Q, :first, :normal, false)) # Chess queen using Shōgi style
-
-analysis = board.pieces_by_style_derivation
-puts analysis[:native].size    # => 2
-puts analysis[:foreign].size   # => 1
-```
-
-### PIN Compatibility Layer
-```ruby
-# EPIN is fully backward compatible with PIN
-def convert_pin_to_epin(pin_string)
-  # All PIN strings are valid EPIN strings (native pieces)
-  Sashite::Epin.parse(pin_string)
-end
-
-def convert_epin_to_pin(epin_identifier)
-  # Only native EPIN pieces can be converted to PIN
-  return nil unless epin_identifier.native?
-
-  "#{epin_identifier.prefix}#{epin_identifier.letter}"
-end
-
-# Usage
-pin_pieces = %w[K Q +R -P k q r p]
-epin_pieces = pin_pieces.map { |pin| convert_pin_to_epin(pin) }
-
-epin_pieces.all?(&:native?) # => true
-epin_pieces.map { |p| convert_epin_to_pin(p) } # => ["K", "Q", "+R", "-P", "k", "q", "r", "p"]
-```
-
-### Move Validation Example
-```ruby
-def can_promote_in_style?(piece, target_rank, style_rules)
-  return false unless piece.normal? # Already promoted pieces can't promote again
-
-  case [piece.type, piece.native? ? style_rules[:native] : style_rules[:foreign]]
-  when %i[P chess]  # Chess pawn
-    (piece.first_player? && target_rank == 8) ||
-      (piece.second_player? && target_rank == 1)
-  when %i[P shogi]  # Shōgi pawn
-    (piece.first_player? && target_rank >= 7) ||
-      (piece.second_player? && target_rank <= 3)
-  when %i[R shogi], %i[B shogi] # Shōgi major pieces
-    true
-  else
-    false
-  end
-end
-
-# Usage
-shogi_pawn = Sashite::Epin.identifier(:P, :first, :normal, false)
-
-style_rules = { native: :chess, foreign: :shogi }
-
-puts can_promote_in_style?(chess_pawn, 8, style_rules)  # => true (chess pawn on 8th rank)
-puts can_promote_in_style?(shogi_pawn, 8, style_rules)  # => true (shogi pawn on 8th rank)
-```
-
-## Implementation Architecture
-
-This gem uses **composition over inheritance** by building upon the proven [sashite-pin](https://github.com/sashite/pin.rb) gem:
-
-- **PIN Foundation**: All type, side, and state logic is handled by an internal `Pin::Identifier` object
-- **EPIN Extension**: Only the derivation (`native`) attribute and related methods are added
-- **Delegation Pattern**: Core PIN methods are delegated to the internal PIN identifier
-- **Immutability**: All transformations return new instances, maintaining functional programming principles
-
-This architecture ensures:
-- **Reliability**: Reuses battle-tested PIN logic
-- **Maintainability**: PIN updates automatically benefit EPIN
-- **Consistency**: PIN and EPIN identifiers behave identically for shared attributes
-- **Performance**: Minimal overhead over pure PIN implementation
-
-## Protocol Mapping
-
-Following the [Game Protocol](https://sashite.dev/game-protocol/):
-
-| Protocol Attribute | EPIN Encoding | Examples | Notes |
-|-------------------|--------------|----------|-------|
-| **Type** | ASCII letter choice | `K`/`k` = King, `P`/`p` = Pawn | Type is always stored as uppercase symbol (`:K`, `:P`) |
-| **Side** | Letter case in display | `K` = First player, `k` = Second player | Case is determined by side during rendering |
-| **State** | Optional prefix | `+K` = Enhanced, `-K` = Diminished, `K` = Normal | |
-| **Style** | Derivation suffix | `K` = Native style, `K'` = Foreign style | |
-
-**Style Derivation Logic**:
-- **No suffix**: Piece has the **native style** of its current side
-- **Apostrophe suffix (`'`)**: Piece has the **foreign style** (opposite side's native style)
-
-**Canonical principle**: Identical pieces must have identical EPIN representations.
-
-## Properties
-
-* **PIN Compatible**: All valid PIN strings are valid EPIN strings
-* **Style Aware**: Distinguishes pieces by their style origin through derivation markers
-* **ASCII Compatible**: Maximum portability across systems
-* **Rule-Agnostic**: Independent of specific game mechanics
-* **Compact Format**: Minimal character usage (1-3 characters per piece)
-* **Visual Distinction**: Clear player and style differentiation
-* **Protocol Compliant**: Complete implementation of Sashité piece attributes
-* **Immutable**: All identifier instances are frozen and transformations return new objects
-* **Functional**: Pure functions with no side effects
-
-## Implementation Notes
-
-### Style Derivation Convention
-
-EPIN follows a strict style derivation convention:
-
-1. **Native pieces** (no suffix): Use the current side's native style
-2. **Foreign pieces** (`'` suffix): Use the opposite side's native style
-3. **Match context**: Each side has a defined native style for the entire match
-4. **Style mutations**: Pieces can change derivation through gameplay mechanics
-
-### Example Flow
+EPIN doesn't reimplement PIN features — it extends PIN minimally:
 
 ```ruby
-# Match context: First player=Chess, Second player=Shōgi
-# Input: "K'" (first player foreign)
-# ↓ Parsing
-# type: :K, side: :first, state: :normal, native: false
-# ↓ Style resolution
-# Effective style: Shōgi (second player's native style)
-# ↓ Display
-# EPIN: "K'" (first player king with foreign/Shōgi style)
+# EPIN is just PIN + derived flag
+class Identifier
+  def initialize(pin, derived: false)
+    @pin = pin
+    @derived = !!derived
+  end
+end
 ```
 
-This ensures that `parse(epin).to_s == epin` for all valid EPIN strings while enabling cross-style gameplay.
+### 2. Absolute Minimal API
 
-## System Constraints
+**6 core methods only:**
+1. `new(pin, derived: false)` — create from PIN
+2. `pin` — get PIN component
+3. `derived?` — check derivation
+4. `to_s` — serialize
+5. `with_pin(new_pin)` — replace PIN
+6. `with_derived(boolean)` — change derivation
 
-- **Maximum 26 piece types** per game system (one per ASCII letter)
-- **Exactly 2 players** (uppercase/lowercase distinction)
-- **3 state levels** (enhanced, normal, diminished)
-- **2 style derivations** (native, foreign)
-- **Style context dependency**: Requires match-level side-style associations
+Everything else uses the PIN component API directly.
+
+### 3. Component Transparency
+
+Access PIN directly — no wrappers:
+
+```ruby
+# Use PIN API directly
+epin.pin.type
+epin.pin.with_type(:Q)
+epin.pin.enhanced?
+epin.pin.flip
+
+# No need for wrapper methods like:
+# epin.type
+# epin.with_type
+# epin.enhanced?
+# epin.flip
+```
+
+### 4. Backward Compatibility
+
+Every valid PIN is a valid EPIN (without derivation marker):
+
+```ruby
+# All PIN identifiers work as EPIN
+pin_tokens = ["K", "+R", "-p", "K^", "+R^"]
+pin_tokens.each do |token|
+  epin = Sashite::Epin.parse(token)
+  epin.native?                 # => true
+  epin.to_s == token           # => true
+end
+```
+
+### 5. Immutability
+
+All instances frozen. Transformations return new instances:
+
+```ruby
+epin1 = Sashite::Epin.parse("K^")
+epin2 = epin1.mark_derived
+epin1.frozen?                 # => true
+epin2.frozen?                 # => true
+epin1.equal?(epin2)           # => false
+```
+
+## Semantics
+
+### Native vs Derived
+
+In cross-style games:
+- **Native piece**: Uses its own side's style (no `'` marker)
+- **Derived piece**: Uses opponent's style (`'` marker present)
+
+```ruby
+# Chess vs Makruk match
+# First player = Chess, Second player = Makruk
+
+"K"   # First player king in Chess style (native)
+"K'"  # First player king in Makruk style (derived from opponent)
+"k"   # Second player king in Makruk style (native)
+"k'"  # Second player king in Chess style (derived from opponent)
+```
+
+### Style Derivation Logic
+
+```ruby
+# Assume: first=Chess, second=Makruk
+
+epin = Sashite::Epin.parse("P")
+# Piece Side: first
+# Style: Chess (first's native) → Native piece
+
+epin = Sashite::Epin.parse("P'")
+# Piece Side: first
+# Style: Makruk (second's native) → Derived piece
+
+epin = Sashite::Epin.parse("p")
+# Piece Side: second
+# Style: Makruk (second's native) → Native piece
+
+epin = Sashite::Epin.parse("p'")
+# Piece Side: second
+# Style: Chess (first's native) → Derived piece
+```
+
+## Error Handling
+
+```ruby
+# Invalid EPIN string
+begin
+  Sashite::Epin.parse("invalid")
+rescue ArgumentError => e
+  e.message # => "Invalid EPIN string: invalid"
+end
+
+# Multiple derivation markers
+begin
+  Sashite::Epin.parse("K''")
+rescue ArgumentError => e
+  # Invalid format
+end
+
+# PIN validation errors delegate
+begin
+  Sashite::Epin.parse("KK'")
+rescue ArgumentError => e
+  # PIN validation error
+end
+```
+
+## Performance Considerations
+
+### Efficient Composition
+
+```ruby
+# PIN component created once
+pin = Sashite::Pin.parse("K^")
+epin = Sashite::Epin.new(pin, derived: true)
+
+# Accessing components is O(1)
+epin.pin         # => direct reference
+epin.derived?    # => direct boolean check
+
+# No overhead from method delegation
+epin.pin.type # => direct method call on PIN component
+```
+
+### Transformation Patterns
+
+```ruby
+epin = Sashite::Epin.parse("K^'")
+
+# Pattern 1: Change derivation only
+epin.unmark_native
+
+# Pattern 2: Change PIN only
+epin.with_pin(epin.pin.with_type(:Q))
+
+# Pattern 3: Change both
+new_pin = epin.pin.with_type(:Q)
+epin.with_pin(new_pin).unmark_native
+
+# Pattern 4: Complex PIN transformation
+new_pin = epin.pin
+              .with_type(:Q)
+              .with_state(:enhanced)
+              .flip
+epin.with_pin(new_pin).mark_derived
+```
+
+## Comparison with PIN
+
+### What EPIN Adds
+
+```ruby
+# PIN: 4 attributes
+pin = Sashite::Pin.parse("K^")
+pin.type          # Piece Name
+pin.side          # Piece Side
+pin.state         # Piece State
+pin.terminal?     # Terminal Status
+
+# EPIN: 5 attributes (PIN + style)
+epin = Sashite::Epin.parse("K^'")
+epin.pin.type     # Piece Name
+epin.pin.side     # Piece Side
+epin.pin.state    # Piece State
+epin.pin.terminal? # Terminal Status
+epin.derived? # Piece Style (5th attribute)
+```
+
+### When to Use EPIN vs PIN
+
+**Use PIN when:**
+- Single-style games (both players use same style)
+- Style information not needed
+- Maximum compatibility required
+
+**Use EPIN when:**
+- Cross-style games (different styles per player)
+- Pieces can change style (promotion to foreign piece)
+- Need to track native vs derived pieces
+
+## Design Properties
+
+- **Rule-agnostic**: Independent of game mechanics
+- **Pure composition**: Extends PIN minimally
+- **Minimal API**: Only 6 core methods
+- **Component transparency**: Direct PIN access
+- **Backward compatible**: All PIN tokens valid
+- **Immutable**: Frozen instances
+- **Type-safe**: Full PIN type preservation
+- **Style-aware**: Tracks native vs derived
+- **Compact**: Single character overhead for derivation
 
 ## Related Specifications
 
-- [PIN](https://sashite.dev/specs/pin/1.0.0/) - Piece Identifier Notation (style-agnostic base)
-- [Game Protocol](https://sashite.dev/game-protocol/) - Conceptual foundation for abstract strategy board games
-- [CELL](https://sashite.dev/specs/cell/) - Board position coordinates
-- [HAND](https://sashite.dev/specs/hand/) - Reserve location notation
-- [PMN](https://sashite.dev/specs/pmn/) - Portable Move Notation
-
-## Documentation
-
-- [Official EPIN Specification v1.0.0](https://sashite.dev/specs/epin/1.0.0/)
-- [EPIN Examples Documentation](https://sashite.dev/specs/epin/1.0.0/examples/)
-- [Game Protocol Foundation](https://sashite.dev/game-protocol/)
-- [API Documentation](https://rubydoc.info/github/sashite/epin.rb/main)
-
-## Development
-
-```sh
-# Clone the repository
-git clone https://github.com/sashite/epin.rb.git
-cd epin.rb
-
-# Install dependencies
-bundle install
-
-# Run tests
-ruby test.rb
-
-# Generate documentation
-yard doc
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/new-feature`)
-3. Add tests for your changes
-4. Ensure all tests pass (`ruby test.rb`)
-5. Commit your changes (`git commit -am 'Add new feature'`)
-6. Push to the branch (`git push origin feature/new-feature`)
-7. Create a Pull Request
+- [EPIN Specification v1.0.0](https://sashite.dev/specs/epin/1.0.0/) - Technical specification
+- [EPIN Examples](https://sashite.dev/specs/epin/1.0.0/examples/) - Usage examples
+- [PIN Specification v1.0.0](https://sashite.dev/specs/pin/1.0.0/) - Base component
+- [Sashité Game Protocol](https://sashite.dev/game-protocol/) - Foundation
 
 ## License
 
