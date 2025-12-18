@@ -1,224 +1,301 @@
 # frozen_string_literal: true
 
-require_relative "epin/identifier"
+require "sashite/pin"
 
 module Sashite
-  # EPIN (Extended Piece Identifier Notation) implementation for Ruby
+  # EPIN (Extended Piece Identifier Notation) implementation for Ruby.
   #
-  # Extends PIN (Piece Identifier Notation) with a derivation marker to track piece style
-  # in cross-style games. EPIN is simply: PIN + optional style derivation marker (').
+  # EPIN extends PIN by adding a **derivation marker** to track piece style
+  # in cross-style games.
   #
-  # ## Core Concept
+  # **EPIN is simply: PIN + optional style derivation marker (`'`)**
   #
-  # EPIN addresses the need to distinguish between:
-  # - **Native pieces**: Using their own side's native style (no marker)
-  # - **Derived pieces**: Using the opponent's native style (marked with ')
+  # == Format
   #
-  # This distinction is essential for cross-style games where different players use
-  # different game traditions (e.g., Chess vs Makruk, Chess vs Shogi).
+  #   <pin-token>[<derivation-marker>]
   #
-  # ## Pure Composition
+  # Where +<pin-token>+ is a valid PIN token and +<derivation-marker>+ is
+  # an optional trailing apostrophe (<tt>'</tt>).
   #
-  # EPIN doesn't reimplement PIN - it's pure composition:
+  # == Five Fundamental Attributes
   #
-  #   EPIN = PIN + derived flag
+  # EPIN exposes all five attributes from the SashitÃ© Game Protocol:
   #
-  # All piece attributes (name, side, state, terminal) come from the PIN component.
-  # EPIN adds only the 5th attribute: piece style (native vs derived).
+  # - *Piece Name* â†' +epin.pin.type+
+  # - *Piece Side* â†' +epin.pin.side+
+  # - *Piece State* â†' +epin.pin.state+
+  # - *Terminal Status* â†' +epin.pin.terminal+
+  # - *Piece Style* â†' +epin.derived+ (native vs derived)
   #
-  # ## Minimal API
+  # == Examples
   #
-  # Module-level methods (3 total):
-  # 1. valid?(epin_string) - validate EPIN string
-  # 2. parse(epin_string) - parse into Identifier
-  # 3. new(pin, derived: false) - create from PIN component
+  #   epin = Sashite::Epin.parse("K^'")
+  #   epin.pin.type      # => :K
+  #   epin.pin.terminal  # => true
+  #   epin.derived       # => true
   #
-  # ## Five Fundamental Attributes
-  #
-  # EPIN represents all five piece attributes from the Sashité Game Protocol:
-  #
-  # From PIN component (4 attributes):
-  # - **Piece Name**: epin.pin.type
-  # - **Piece Side**: epin.pin.side
-  # - **Piece State**: epin.pin.state
-  # - **Terminal Status**: epin.pin.terminal?
-  #
-  # From EPIN (5th attribute):
-  # - **Piece Style**: epin.derived? (native vs derived)
-  #
-  # ## Format Structure
-  #
-  # Structure: `<pin>[']`
-  #
-  # Grammar (BNF):
-  #   <epin> ::= <pin> | <pin> "'"
-  #   <pin> ::= ["+" | "-"] <letter> ["^"]
-  #   <letter> ::= "A" | ... | "Z" | "a" | ... | "z"
-  #
-  # Regular Expression: `/\A[-+]?[A-Za-z]\^?'?\z/`
-  #
-  # ## Semantics
-  #
-  # ### Native vs Derived
-  #
-  # In cross-style games (e.g., Chess vs Makruk):
-  # - First player's native style: Chess
-  # - Second player's native style: Makruk
-  #
-  # Then:
-  # - "K" = First player king in Chess style (native)
-  # - "K'" = First player king in Makruk style (derived from opponent)
-  # - "k" = Second player king in Makruk style (native)
-  # - "k'" = Second player king in Chess style (derived from opponent)
-  #
-  # ### Backward Compatibility
-  #
-  # Every valid PIN token is a valid EPIN token:
-  # - "K" is valid PIN and valid EPIN (native)
-  # - "+R^" is valid PIN and valid EPIN (native)
-  # - All PIN semantics preserved
-  #
-  # EPIN extends PIN by adding the optional derivation marker:
-  # - "K'" is valid EPIN (derived)
-  # - "+R^'" is valid EPIN (enhanced, terminal, derived)
-  #
-  # ## Examples
-  #
-  # ### Basic Usage
-  #
-  #   # Parse EPIN strings
-  #   native = Sashite::Epin.parse("K^")      # Native king
-  #   derived = Sashite::Epin.parse("K^'")    # Derived king
-  #
-  #   # Access attributes via PIN component
-  #   native.pin.type       # => :K
-  #   native.pin.terminal?  # => true
-  #   native.derived?       # => false
-  #
-  #   # Create from PIN component
   #   pin = Sashite::Pin.parse("K^")
-  #   epin = Sashite::Epin.new(pin, derived: false)
-  #   epin.to_s             # => "K^"
+  #   epin = Sashite::Epin.new(pin, derived: true)
+  #   epin.to_s  # => "K^'"
   #
-  # ### Transformations
+  #   Sashite::Epin.valid?("K^'")   # => true
+  #   Sashite::Epin.valid?("K'^")   # => false
   #
-  #   epin = Sashite::Epin.parse("K^")
-  #
-  #   # Mark as derived
-  #   derived = epin.mark_derived
-  #   derived.to_s          # => "K^'"
-  #
-  #   # Transform PIN component
-  #   queen = epin.with_pin(epin.pin.with_type(:Q))
-  #   queen.to_s            # => "Q^"
-  #
-  #   # Transform both
-  #   derived_queen = epin
-  #     .with_pin(epin.pin.with_type(:Q))
-  #     .mark_derived
-  #   derived_queen.to_s    # => "Q^'"
-  #
-  # ### Cross-Style Games
-  #
-  #   # Chess vs Makruk match
-  #   # First player = Chess, Second player = Makruk
-  #
-  #   chess_king = Sashite::Epin.parse("K^")     # Native Chess king
-  #   makruk_pawn = Sashite::Epin.parse("P'")    # Derived Makruk pawn
-  #
-  #   chess_king.native?       # => true (uses Chess style)
-  #   makruk_pawn.derived?     # => true (uses Makruk style)
-  #
-  # ## Design Properties
-  #
-  # - **Rule-agnostic**: Independent of game mechanics
-  # - **Pure composition**: Extends PIN minimally (PIN + derived flag)
-  # - **Minimal API**: Only 3 module methods, 6 instance methods
-  # - **Component transparency**: Direct PIN access via epin.pin
-  # - **Backward compatible**: All PIN tokens are valid EPIN tokens
-  # - **Immutable**: All instances frozen, transformations return new objects
-  # - **Type-safe**: Full PIN type preservation
-  # - **Style-aware**: Tracks native vs derived pieces
-  # - **Compact**: Single character overhead for style information
-  #
-  # @see https://sashite.dev/specs/epin/1.0.0/ EPIN Specification v1.0.0
-  # @see https://sashite.dev/specs/epin/1.0.0/examples/ EPIN Examples
-  # @see https://sashite.dev/specs/pin/1.0.0/ PIN Specification (base component)
-  module Epin
-    # Check if a string is a valid EPIN notation
-    #
-    # Validates both the EPIN format and the underlying PIN component.
-    #
-    # @param epin_string [String] the string to validate
-    # @return [Boolean] true if valid EPIN, false otherwise
-    #
-    # @example Validate EPIN strings
-    #   Sashite::Epin.valid?("K^")     # => true (valid PIN, native)
-    #   Sashite::Epin.valid?("K^'")    # => true (valid PIN with derivation)
-    #   Sashite::Epin.valid?("+R'")    # => true (enhanced derived rook)
-    #   Sashite::Epin.valid?("K^''")   # => false (multiple markers)
-    #   Sashite::Epin.valid?("KK'")    # => false (invalid PIN part)
-    #   Sashite::Epin.valid?("invalid") # => false (invalid format)
-    def self.valid?(epin_string)
-      Identifier.valid?(epin_string)
-    end
+  # See the EPIN Specification (https://sashite.dev/specs/epin/1.0.0/) for details.
+  class Epin
+    # Pattern for validating EPIN strings
+    EPIN_PATTERN = /\A(?<pin>[-+]?[A-Za-z]\^?)(?<derived>')?\z/
 
-    # Parse an EPIN string into an Identifier object
-    #
-    # Creates a new EPIN identifier by parsing the string, extracting the PIN part
-    # and derivation marker, validating the PIN component, and creating an identifier
-    # with the appropriate derivation status.
-    #
-    # @param epin_string [String] EPIN notation string (format: <pin>['])
-    # @return [Epin::Identifier] parsed identifier with PIN component and derivation flag
-    # @raise [ArgumentError] if the EPIN string is invalid
-    #
-    # @example Parse different EPIN formats
-    #   Sashite::Epin.parse("K^")   # => Native king, terminal
-    #   Sashite::Epin.parse("K^'")  # => Derived king, terminal
-    #   Sashite::Epin.parse("+R")   # => Native rook, enhanced
-    #   Sashite::Epin.parse("+R'")  # => Derived rook, enhanced
-    #   Sashite::Epin.parse("-p")   # => Native pawn, diminished
-    #
-    # @example Access all five attributes
-    #   epin = Sashite::Epin.parse("+R^'")
-    #   epin.pin.type       # => :R (Piece Name)
-    #   epin.pin.side       # => :first (Piece Side)
-    #   epin.pin.state      # => :enhanced (Piece State)
-    #   epin.pin.terminal?  # => true (Terminal Status)
-    #   epin.derived?       # => true (Piece Style)
-    def self.parse(epin_string)
-      Identifier.parse(epin_string)
-    end
+    # @return [Sashite::Pin] The underlying PIN component
+    attr_reader :pin
 
-    # Create a new identifier from a PIN component and derivation flag
+    # @return [Boolean] Derivation status (true = derived, false = native)
+    attr_reader :derived
+
+    # ========================================================================
+    # Creation and Parsing
+    # ========================================================================
+
+    # Creates a new EPIN instance from a PIN component.
     #
-    # Constructs an EPIN identifier by combining a PIN component (which provides
-    # the four base attributes: name, side, state, terminal) with a derivation flag
-    # (which provides the fifth attribute: style).
+    # @param pin [Sashite::Pin] The underlying PIN instance
+    # @param derived [Boolean] Derivation status (default: false)
+    # @return [Epin] A new frozen Epin instance
     #
-    # @param pin [Pin::Identifier] PIN component providing base attributes
-    # @param derived [Boolean] whether the piece uses derived style (default: false)
-    # @return [Epin::Identifier] new immutable identifier instance
-    # @raise [ArgumentError] if pin is not a Pin::Identifier
-    #
-    # @example Create identifiers from PIN components
+    # @example
     #   pin = Sashite::Pin.parse("K^")
-    #   native = Sashite::Epin.new(pin, derived: false)
-    #   native.to_s         # => "K^"
+    #   Sashite::Epin.new(pin)
+    #   # => #<Sashite::Epin K^>
     #
-    #   derived = Sashite::Epin.new(pin, derived: true)
-    #   derived.to_s        # => "K^'"
+    #   Sashite::Epin.new(pin, derived: true)
+    #   # => #<Sashite::Epin K^'>
+    def initialize(pin, derived: false)
+      raise ArgumentError, "Expected a Sashite::Pin instance, got: #{pin.inspect}" unless pin.is_a?(Pin)
+
+      @pin = pin
+      @derived = !!derived
+
+      freeze
+    end
+
+    # Parses an EPIN string into an Epin instance.
     #
-    # @example Cross-style game setup
-    #   # First player uses Chess style, second uses Makruk style
-    #   chess_king = Sashite::Epin.new(Sashite::Pin.parse("K^"), derived: false)
-    #   makruk_pawn = Sashite::Epin.new(Sashite::Pin.parse("P"), derived: true)
+    # @param epin_string [String] The EPIN string to parse
+    # @return [Epin] A new Epin instance
+    # @raise [ArgumentError] If the string is not a valid EPIN
     #
-    #   chess_king.native?    # => true (uses own Chess style)
-    #   makruk_pawn.derived?  # => true (uses opponent's Makruk style)
-    def self.new(pin, derived: false)
-      Identifier.new(pin, derived: derived)
+    # @example
+    #   Sashite::Epin.parse("K")
+    #   # => #<Sashite::Epin K>
+    #
+    #   Sashite::Epin.parse("K'")
+    #   # => #<Sashite::Epin K'>
+    #
+    #   Sashite::Epin.parse("+R^'")
+    #   # => #<Sashite::Epin +R^'>
+    #
+    #   Sashite::Epin.parse("invalid")
+    #   # => ArgumentError: Invalid EPIN string: invalid
+    def self.parse(epin_string)
+      raise ArgumentError, "Invalid EPIN string: #{epin_string.inspect}" unless epin_string.is_a?(String)
+
+      match = EPIN_PATTERN.match(epin_string)
+      raise ArgumentError, "Invalid EPIN string: #{epin_string}" unless match
+
+      pin_string = match[:pin]
+      derived_marker = match[:derived]
+
+      pin = Pin.parse(pin_string)
+      derived = derived_marker == "'"
+
+      new(pin, derived: derived)
+    end
+
+    # Checks if a string is a valid EPIN notation.
+    #
+    # @param epin_string [String] The string to validate
+    # @return [Boolean] true if valid, false otherwise
+    #
+    # @example
+    #   Sashite::Epin.valid?("K")      # => true
+    #   Sashite::Epin.valid?("K'")     # => true
+    #   Sashite::Epin.valid?("+R^'")   # => true
+    #   Sashite::Epin.valid?("K'^")    # => false
+    #   Sashite::Epin.valid?("K''")    # => false
+    #   Sashite::Epin.valid?("invalid") # => false
+    def self.valid?(epin_string)
+      return false unless epin_string.is_a?(String)
+
+      EPIN_PATTERN.match?(epin_string)
+    end
+
+    # ========================================================================
+    # Conversion
+    # ========================================================================
+
+    # Converts the Epin to its string representation.
+    #
+    # @return [String] The EPIN string
+    #
+    # @example
+    #   pin = Sashite::Pin.parse("K^")
+    #   Sashite::Epin.new(pin).to_s
+    #   # => "K^"
+    #
+    #   Sashite::Epin.new(pin, derived: true).to_s
+    #   # => "K^'"
+    def to_s
+      "#{pin}#{derivation_suffix}"
+    end
+
+    # ========================================================================
+    # Transformations
+    # ========================================================================
+
+    # Returns a new Epin with a different PIN component.
+    #
+    # @param new_pin [Sashite::Pin] The new PIN component
+    # @return [Epin] A new Epin with the specified PIN
+    #
+    # @example
+    #   epin = Sashite::Epin.parse("K^'")
+    #   new_pin = epin.pin.with_type(:Q)
+    #   epin.with_pin(new_pin).to_s
+    #   # => "Q^'"
+    def with_pin(new_pin)
+      return self if pin == new_pin
+
+      self.class.new(new_pin, derived: derived)
+    end
+
+    # Returns a new Epin with a different derivation status.
+    #
+    # @param new_derived [Boolean] The new derivation status
+    # @return [Epin] A new Epin with the specified derivation status
+    #
+    # @example
+    #   epin = Sashite::Epin.parse("K^")
+    #   epin.with_derived(true).to_s
+    #   # => "K^'"
+    #
+    #   epin = Sashite::Epin.parse("K^'")
+    #   epin.with_derived(false).to_s
+    #   # => "K^"
+    def with_derived(new_derived)
+      return self if derived == !!new_derived
+
+      self.class.new(pin, derived: !!new_derived)
+    end
+
+    # Returns a new Epin marked as derived.
+    #
+    # @return [Epin] A new Epin with derived: true
+    #
+    # @example
+    #   epin = Sashite::Epin.parse("K^")
+    #   epin.mark_derived.derived
+    #   # => true
+    def mark_derived
+      return self if derived
+
+      self.class.new(pin, derived: true)
+    end
+
+    # Returns a new Epin marked as native (not derived).
+    #
+    # @return [Epin] A new Epin with derived: false
+    #
+    # @example
+    #   epin = Sashite::Epin.parse("K^'")
+    #   epin.unmark_derived.derived
+    #   # => false
+    def unmark_derived
+      return self unless derived
+
+      self.class.new(pin, derived: false)
+    end
+
+    # ========================================================================
+    # Queries
+    # ========================================================================
+
+    # Checks if the Epin is derived (uses opponent's style).
+    #
+    # @return [Boolean] true if derived
+    #
+    # @example
+    #   Sashite::Epin.parse("K^'").derived?  # => true
+    #   Sashite::Epin.parse("K^").derived?   # => false
+    def derived?
+      derived
+    end
+
+    # Checks if the Epin is native (uses own side's style).
+    #
+    # @return [Boolean] true if native
+    #
+    # @example
+    #   Sashite::Epin.parse("K^").native?   # => true
+    #   Sashite::Epin.parse("K^'").native?  # => false
+    def native?
+      !derived
+    end
+
+    # Checks if two Epins have the same derivation status.
+    #
+    # @param other [Epin] The other Epin to compare
+    # @return [Boolean] true if same derivation status
+    #
+    # @example
+    #   epin1 = Sashite::Epin.parse("K^'")
+    #   epin2 = Sashite::Epin.parse("Q'")
+    #   epin1.same_derived?(epin2)
+    #   # => true
+    #
+    #   epin3 = Sashite::Epin.parse("K^")
+    #   epin1.same_derived?(epin3)
+    #   # => false
+    def same_derived?(other)
+      derived == other.derived
+    end
+
+    # ========================================================================
+    # Comparison
+    # ========================================================================
+
+    # Checks equality with another Epin.
+    #
+    # @param other [Object] The object to compare
+    # @return [Boolean] true if equal
+    def ==(other)
+      return false unless other.is_a?(self.class)
+
+      pin == other.pin && derived == other.derived
+    end
+
+    alias eql? ==
+
+    # Returns a hash code for the Epin.
+    #
+    # @return [Integer] Hash code
+    def hash
+      [pin, derived].hash
+    end
+
+    # Returns an inspect string for the Epin.
+    #
+    # @return [String] Inspect representation
+    def inspect
+      "#<#{self.class} #{self}>"
+    end
+
+    private
+
+    # Returns the derivation suffix for string representation.
+    #
+    # @return [String] "'" if derived, "" otherwise
+    def derivation_suffix
+      derived ? "'" : ""
     end
   end
 end

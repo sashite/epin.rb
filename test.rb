@@ -17,11 +17,8 @@ SimpleCov.start
 # - Derivation status tracking and transformation
 # - PIN component composition
 # - Backward compatibility with PIN
-#
-# This test assumes the existence of:
-# - lib/sashite-epin.rb
 
-require_relative "lib/sashite-epin"
+require_relative "lib/sashite/epin"
 require "set"
 
 # Helper function to run a test and report errors
@@ -111,11 +108,11 @@ end
 # MODULE-LEVEL PARSING TESTS
 # ==============================================================================
 
-run_test("Module parse delegates to Identifier class") do
+run_test("Module parse returns Epin instance") do
   epin_string = "K^'"
   epin = Sashite::Epin.parse(epin_string)
 
-  raise "parse should return Identifier instance" unless epin.is_a?(Sashite::Epin::Identifier)
+  raise "parse should return Epin instance" unless epin.is_a?(Sashite::Epin)
   raise "epin should have correct EPIN string" unless epin.to_s == epin_string
 end
 
@@ -129,11 +126,11 @@ run_test("Module parse handles native and derived pieces") do
   raise "derived should not be native" if derived.native?
 end
 
-run_test("Module new creates identifier from PIN component") do
+run_test("Module new creates instance from PIN component") do
   pin = Sashite::Pin.parse("K^")
 
   native = Sashite::Epin.new(pin, derived: false)
-  raise "new should return Identifier instance" unless native.is_a?(Sashite::Epin::Identifier)
+  raise "new should return Epin instance" unless native.is_a?(Sashite::Epin)
   raise "native should have correct PIN" unless native.pin == pin
   raise "native should not be derived" if native.derived?
   raise "native should have correct EPIN string" unless native.to_s == "K^"
@@ -144,11 +141,20 @@ run_test("Module new creates identifier from PIN component") do
   raise "derived should have correct EPIN string" unless derived.to_s == "K^'"
 end
 
+run_test("Module new defaults to native (derived: false)") do
+  pin = Sashite::Pin.parse("K^")
+  epin = Sashite::Epin.new(pin)
+
+  raise "default should be native" unless epin.native?
+  raise "default should not be derived" if epin.derived?
+  raise "default should have correct EPIN string" unless epin.to_s == "K^"
+end
+
 # ==============================================================================
-# IDENTIFIER CREATION AND PARSING TESTS
+# CREATION AND PARSING TESTS
 # ==============================================================================
 
-run_test("Identifier.parse creates correct instances from EPIN strings") do
+run_test("Parse creates correct instances from EPIN strings") do
   test_cases = {
     "K" => { derived: false, pin_string: "K" },
     "K'" => { derived: true, pin_string: "K" },
@@ -173,7 +179,7 @@ run_test("Identifier.parse creates correct instances from EPIN strings") do
   end
 end
 
-run_test("Identifier constructor with PIN component") do
+run_test("Constructor with PIN component") do
   test_cases = [
     ["K^", false, "K^"],
     ["K^", true, "K^'"],
@@ -185,7 +191,7 @@ run_test("Identifier constructor with PIN component") do
 
   test_cases.each do |pin_string, derived, expected_epin|
     pin = Sashite::Pin.parse(pin_string)
-    epin = Sashite::Epin::Identifier.new(pin, derived: derived)
+    epin = Sashite::Epin.new(pin, derived: derived)
 
     raise "PIN should be #{pin_string}" unless epin.pin.to_s == pin_string
     raise "derived should be #{derived}" unless epin.derived? == derived
@@ -197,13 +203,13 @@ end
 # PIN COMPONENT ACCESS TESTS
 # ==============================================================================
 
-run_test("Identifier provides access to PIN component") do
+run_test("Provides access to PIN component") do
   test_cases = ["K^", "K^'", "+R", "+R'", "-p", "-p'"]
 
   test_cases.each do |epin_string|
     epin = Sashite::Epin.parse(epin_string)
 
-    raise "#{epin_string}: should have PIN component" unless epin.pin.is_a?(Sashite::Pin::Identifier)
+    raise "#{epin_string}: should have PIN component" unless epin.pin.is_a?(Sashite::Pin)
     raise "#{epin_string}: PIN component should be frozen" unless epin.pin.frozen?
 
     # Verify PIN string matches (remove derivation marker if present)
@@ -212,7 +218,7 @@ run_test("Identifier provides access to PIN component") do
   end
 end
 
-run_test("Identifier PIN component access is direct reference") do
+run_test("PIN component access is direct reference") do
   pin = Sashite::Pin.parse("K^")
   epin = Sashite::Epin.new(pin, derived: false)
 
@@ -224,7 +230,7 @@ end
 # STRING REPRESENTATION TESTS
 # ==============================================================================
 
-run_test("Identifier to_s returns correct EPIN string") do
+run_test("to_s returns correct EPIN string") do
   test_cases = [
     ["K^", false, "K^"],
     ["K^", true, "K^'"],
@@ -236,26 +242,26 @@ run_test("Identifier to_s returns correct EPIN string") do
 
   test_cases.each do |pin_string, derived, expected|
     pin = Sashite::Pin.parse(pin_string)
-    epin = Sashite::Epin::Identifier.new(pin, derived: derived)
+    epin = Sashite::Epin.new(pin, derived: derived)
     result = epin.to_s
 
     raise "#{pin_string}, #{derived} should be #{expected}, got #{result}" unless result == expected
   end
 end
 
-run_test("Identifier suffix method returns correct derivation marker") do
-  native = Sashite::Epin.parse("K^")
-  derived = Sashite::Epin.parse("K^'")
+run_test("inspect returns useful representation") do
+  epin = Sashite::Epin.parse("K^'")
+  inspect_string = epin.inspect
 
-  raise "native suffix should be empty" unless native.suffix == ""
-  raise "derived suffix should be '" unless derived.suffix == "'"
+  raise "inspect should include class name" unless inspect_string.include?("Sashite::Epin")
+  raise "inspect should include EPIN string" unless inspect_string.include?("K^'")
 end
 
 # ==============================================================================
 # DERIVATION TRANSFORMATION TESTS
 # ==============================================================================
 
-run_test("Identifier derivation transformations return new instances") do
+run_test("Derivation transformations return new instances") do
   epin = Sashite::Epin.parse("K^")
 
   # Test mark_derived
@@ -265,9 +271,9 @@ run_test("Identifier derivation transformations return new instances") do
   raise "original should be unchanged" if epin.derived?
   raise "derived should have correct string" unless derived.to_s == "K^'"
 
-  # Test unmark_native
-  back_to_native = derived.unmark_native
-  raise "unmark_native should return new instance" if back_to_native.equal?(derived)
+  # Test unmark_derived
+  back_to_native = derived.unmark_derived
+  raise "unmark_derived should return new instance" if back_to_native.equal?(derived)
   raise "back to native should not be derived" if back_to_native.derived?
   raise "back to native should have correct string" unless back_to_native.to_s == "K^"
 
@@ -278,7 +284,7 @@ run_test("Identifier derivation transformations return new instances") do
   raise "toggled should have correct string" unless toggled.to_s == "K^'"
 end
 
-run_test("Identifier derivation transformations preserve PIN component") do
+run_test("Derivation transformations preserve PIN component") do
   pin_string = "+R^"
   epin = Sashite::Epin.parse(pin_string)
 
@@ -287,9 +293,9 @@ run_test("Identifier derivation transformations preserve PIN component") do
   raise "mark_derived should preserve PIN" unless derived.pin.to_s == pin_string
   raise "derived should have correct string" unless derived.to_s == "+R^'"
 
-  # unmark_native should preserve PIN
-  back = derived.unmark_native
-  raise "unmark_native should preserve PIN" unless back.pin.to_s == pin_string
+  # unmark_derived should preserve PIN
+  back = derived.unmark_derived
+  raise "unmark_derived should preserve PIN" unless back.pin.to_s == pin_string
   raise "back should have correct string" unless back.to_s == "+R^"
 
   # with_derived should preserve PIN
@@ -297,15 +303,15 @@ run_test("Identifier derivation transformations preserve PIN component") do
   raise "with_derived should preserve PIN" unless toggled.pin.to_s == pin_string
 end
 
-run_test("Identifier derivation transformations return self when appropriate") do
+run_test("Derivation transformations return self when appropriate") do
   native = Sashite::Epin.parse("K^")
   derived = Sashite::Epin.parse("K^'")
 
   # mark_derived on already derived should return self
   raise "mark_derived on derived should return self" unless derived.mark_derived.equal?(derived)
 
-  # unmark_native on already native should return self
-  raise "unmark_native on native should return self" unless native.unmark_native.equal?(native)
+  # unmark_derived on already native should return self
+  raise "unmark_derived on native should return self" unless native.unmark_derived.equal?(native)
 
   # with_derived with same value should return self
   raise "with_derived(false) on native should return self" unless native.with_derived(false).equal?(native)
@@ -316,7 +322,7 @@ end
 # PIN REPLACEMENT TESTS
 # ==============================================================================
 
-run_test("Identifier with_pin replaces PIN component") do
+run_test("with_pin replaces PIN component") do
   epin = Sashite::Epin.parse("K^'")
   new_pin = Sashite::Pin.parse("Q^")
 
@@ -329,7 +335,7 @@ run_test("Identifier with_pin replaces PIN component") do
   raise "original should be unchanged" unless epin.to_s == "K^'"
 end
 
-run_test("Identifier with_pin preserves derivation status") do
+run_test("with_pin preserves derivation status") do
   test_cases = [
     ["K^", false, "Q^", "Q^"],
     ["K^'", true, "Q^", "Q^'"],
@@ -347,7 +353,7 @@ run_test("Identifier with_pin preserves derivation status") do
   end
 end
 
-run_test("Identifier with_pin returns self when PIN is same") do
+run_test("with_pin returns self when PIN is same") do
   epin = Sashite::Epin.parse("K^'")
   same_pin = epin.pin
 
@@ -355,14 +361,14 @@ run_test("Identifier with_pin returns self when PIN is same") do
   raise "with_pin with same PIN should return self" unless result.equal?(epin)
 end
 
-run_test("Identifier with_pin validates PIN component") do
+run_test("with_pin validates PIN component") do
   epin = Sashite::Epin.parse("K^")
 
   begin
     epin.with_pin("not a pin")
     raise "Should have raised error for invalid PIN"
   rescue ArgumentError => e
-    raise "Error should mention PIN" unless e.message.include?("Pin::Identifier")
+    raise "Error should mention Pin" unless e.message.include?("Pin")
   end
 end
 
@@ -370,7 +376,7 @@ end
 # TRANSFORMATION CHAINS TESTS
 # ==============================================================================
 
-run_test("Identifier transformation chains work correctly") do
+run_test("Transformation chains work correctly") do
   epin = Sashite::Epin.parse("K^")
 
   # Chain: change PIN then mark derived
@@ -388,8 +394,8 @@ run_test("Identifier transformation chains work correctly") do
   # Chain: complex
   result3 = epin
     .mark_derived
-    .with_pin(epin.pin.with_type(:Q).with_state(:enhanced))
-    .unmark_native
+    .with_pin(epin.pin.with_type(:Q).enhance)
+    .unmark_derived
     .mark_derived
   raise "chain 3 should work" unless result3.to_s == "+Q^'"
 
@@ -401,7 +407,7 @@ end
 # IMMUTABILITY TESTS
 # ==============================================================================
 
-run_test("Identifier immutability") do
+run_test("Immutability") do
   epin = Sashite::Epin.parse("K^'")
 
   # Test that epin is frozen
@@ -409,12 +415,12 @@ run_test("Identifier immutability") do
 
   # Test that mutations don't affect original
   original_string = epin.to_s
-  derived = epin.mark_derived
-  native = epin.unmark_native
-  changed_pin = epin.with_pin(epin.pin.with_type(:Q))
+  _derived = epin.mark_derived
+  _native = epin.unmark_derived
+  _changed_pin = epin.with_pin(epin.pin.with_type(:Q))
 
   raise "original should be unchanged after mark_derived" unless epin.to_s == original_string
-  raise "original should be unchanged after unmark_native" unless epin.to_s == original_string
+  raise "original should be unchanged after unmark_derived" unless epin.to_s == original_string
   raise "original should be unchanged after with_pin" unless epin.to_s == original_string
 end
 
@@ -422,7 +428,7 @@ end
 # EQUALITY AND HASH TESTS
 # ==============================================================================
 
-run_test("Identifier equality and hash") do
+run_test("Equality and hash") do
   epin1 = Sashite::Epin.parse("K^")
   epin2 = Sashite::Epin.parse("K^")
   epin3 = Sashite::Epin.parse("K^'")
@@ -433,6 +439,10 @@ run_test("Identifier equality and hash") do
   raise "different derivation should not be equal" if epin1 == epin3
   raise "different PIN should not be equal" if epin1 == epin4
 
+  # Test eql?
+  raise "eql? should match ==" unless epin1.eql?(epin2)
+  raise "eql? should match ==" if epin1.eql?(epin3)
+
   # Test hash consistency
   raise "equal epins should have same hash" unless epin1.hash == epin2.hash
 
@@ -441,7 +451,7 @@ run_test("Identifier equality and hash") do
   raise "set should contain 3 unique epins" unless epins_set.size == 3
 end
 
-run_test("Identifier equality considers both PIN and derivation") do
+run_test("Equality considers both PIN and derivation") do
   pin = Sashite::Pin.parse("K^")
   native = Sashite::Epin.new(pin, derived: false)
   derived = Sashite::Epin.new(pin, derived: true)
@@ -450,11 +460,19 @@ run_test("Identifier equality considers both PIN and derivation") do
   raise "different derivation should have different hash" if native.hash == derived.hash
 end
 
+run_test("Equality with non-Epin objects") do
+  epin = Sashite::Epin.parse("K^")
+
+  raise "should not equal string" if epin == "K^"
+  raise "should not equal nil" if epin == nil
+  raise "should not equal PIN" if epin == epin.pin
+end
+
 # ==============================================================================
 # QUERY METHODS TESTS
 # ==============================================================================
 
-run_test("Identifier native? and derived? methods") do
+run_test("native? and derived? methods") do
   native = Sashite::Epin.parse("K^")
   derived = Sashite::Epin.parse("K^'")
 
@@ -471,44 +489,64 @@ run_test("Identifier native? and derived? methods") do
   raise "derived? should be opposite of native?" unless derived.derived? == !derived.native?
 end
 
-run_test("Identifier same_derivation? method") do
+run_test("same_derived? method") do
   native1 = Sashite::Epin.parse("K^")
   native2 = Sashite::Epin.parse("Q^")
   derived1 = Sashite::Epin.parse("K^'")
   derived2 = Sashite::Epin.parse("Q^'")
 
-  raise "native pieces should have same derivation" unless native1.same_derivation?(native2)
-  raise "derived pieces should have same derivation" unless derived1.same_derivation?(derived2)
-  raise "native and derived should not have same derivation" if native1.same_derivation?(derived1)
+  raise "native pieces should have same derivation" unless native1.same_derived?(native2)
+  raise "derived pieces should have same derivation" unless derived1.same_derived?(derived2)
+  raise "native and derived should not have same derivation" if native1.same_derived?(derived1)
 end
 
 # ==============================================================================
 # ERROR HANDLING TESTS
 # ==============================================================================
 
-run_test("Identifier error handling for invalid PIN component") do
+run_test("Error handling for invalid PIN component in constructor") do
   begin
-    Sashite::Epin::Identifier.new("not a pin", derived: false)
+    Sashite::Epin.new("not a pin", derived: false)
     raise "Should have raised error for non-PIN"
   rescue ArgumentError => e
-    raise "Error should mention Pin::Identifier" unless e.message.include?("Pin::Identifier")
+    raise "Error should mention Pin" unless e.message.include?("Pin")
   end
 
   begin
-    Sashite::Epin::Identifier.new(nil, derived: false)
+    Sashite::Epin.new(nil, derived: false)
     raise "Should have raised error for nil"
   rescue ArgumentError => e
-    raise "Error should mention Pin::Identifier" unless e.message.include?("Pin::Identifier")
+    raise "Error should mention Pin" unless e.message.include?("Pin")
+  end
+
+  begin
+    Sashite::Epin.new(123, derived: false)
+    raise "Should have raised error for integer"
+  rescue ArgumentError => e
+    raise "Error should mention Pin" unless e.message.include?("Pin")
   end
 end
 
-run_test("Identifier error handling for invalid EPIN strings") do
+run_test("Error handling for invalid EPIN strings in parse") do
   invalid_epins = ["", "KK'", "K''", "'K", "K^''", "+++K'", "invalid"]
 
   invalid_epins.each do |epin|
     begin
       Sashite::Epin.parse(epin)
       raise "Should have raised error for #{epin.inspect}"
+    rescue ArgumentError
+      # Expected
+    end
+  end
+end
+
+run_test("Error handling for non-string input in parse") do
+  non_strings = [nil, 123, :king, [], {}]
+
+  non_strings.each do |input|
+    begin
+      Sashite::Epin.parse(input)
+      raise "Should have raised error for #{input.inspect}"
     rescue ArgumentError
       # Expected
     end
@@ -540,8 +578,8 @@ run_test("All valid PIN tokens are valid EPIN tokens") do
   end
 end
 
-run_test("EPIN can be created from any PIN identifier") do
-  # Test that any PIN identifier can be wrapped in EPIN
+run_test("EPIN can be created from any PIN instance") do
+  # Test that any PIN instance can be wrapped in EPIN
   pin_tokens = ["K^", "+R", "-p", "+K^", "-P^"]
 
   pin_tokens.each do |token|
@@ -638,6 +676,25 @@ run_test("Practical usage - cross-style game simulation") do
   raise "captured piece should be first player" unless captured.pin.first_player?
 end
 
+run_test("Practical usage - transformation pipeline") do
+  # Start with a native pawn
+  pawn = Sashite::Epin.parse("P")
+
+  # Promote to queen (change type via PIN)
+  promoted = pawn.with_pin(pawn.pin.with_type(:Q))
+  raise "promoted should be Q" unless promoted.pin.type == :Q
+  raise "promoted should be native" unless promoted.native?
+
+  # Mark as enhanced
+  enhanced = promoted.with_pin(promoted.pin.enhance)
+  raise "enhanced should be enhanced" unless enhanced.pin.enhanced?
+
+  # Convert to derived (foreign style)
+  foreign = enhanced.mark_derived
+  raise "foreign should be derived" unless foreign.derived?
+  raise "foreign should have correct string" unless foreign.to_s == "+Q'"
+end
+
 # ==============================================================================
 # ALL 26 LETTERS TESTS
 # ==============================================================================
@@ -700,6 +757,40 @@ run_test("Regex pattern compliance with spec") do
 end
 
 # ==============================================================================
+# EDGE CASES TESTS
+# ==============================================================================
+
+run_test("Edge case - derived flag coercion") do
+  pin = Sashite::Pin.parse("K")
+
+  # Truthy values should be coerced to true
+  truthy_epin = Sashite::Epin.new(pin, derived: "yes")
+  raise "truthy string should be coerced to derived" unless truthy_epin.derived?
+
+  # Falsy values should be coerced to false
+  falsy_epin = Sashite::Epin.new(pin, derived: nil)
+  raise "nil should be coerced to native" unless falsy_epin.native?
+
+  # But the stored value should be boolean
+  raise "derived should be boolean true" unless truthy_epin.derived == true
+  raise "derived should be boolean false" unless falsy_epin.derived == false
+end
+
+run_test("Edge case - with_derived coercion") do
+  epin = Sashite::Epin.parse("K")
+
+  # Truthy values
+  derived = epin.with_derived("yes")
+  raise "truthy should become derived" unless derived.derived?
+  raise "derived should be boolean" unless derived.derived == true
+
+  # Falsy values
+  native = epin.with_derived(nil)
+  raise "nil should become native" unless native.native?
+  raise "derived should be boolean" unless native.derived == false
+end
+
+# ==============================================================================
 # PERFORMANCE TESTS
 # ==============================================================================
 
@@ -709,7 +800,7 @@ run_test("Performance - repeated operations") do
   1000.times do
     epin = Sashite::Epin.new(pin, derived: false)
     derived = epin.mark_derived
-    native = derived.unmark_native
+    native = derived.unmark_derived
     changed = epin.with_pin(epin.pin.with_type(:Q))
 
     raise "Performance test failed" unless Sashite::Epin.valid?("K^")
@@ -720,6 +811,17 @@ run_test("Performance - repeated operations") do
   end
 end
 
+run_test("Performance - parsing") do
+  tokens = ["K", "K'", "K^", "K^'", "+R", "+R'", "-p", "-p'"]
+
+  1000.times do
+    tokens.each do |token|
+      epin = Sashite::Epin.parse(token)
+      raise "Parse failed" unless epin.to_s == token
+    end
+  end
+end
+
 puts
-puts "All EPIN v1.0.0 tests passed!"
+puts "All EPIN tests passed!"
 puts

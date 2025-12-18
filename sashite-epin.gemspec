@@ -8,13 +8,9 @@ Gem::Specification.new do |spec|
   spec.summary = "EPIN (Extended Piece Identifier Notation) implementation for Ruby extending PIN with style derivation markers."
 
   spec.description = <<~DESC
-    EPIN (Extended Piece Identifier Notation) extends PIN to provide style-aware piece representation
-    in abstract strategy board games. This gem implements the EPIN Specification v1.0.0 with
-    a modern Ruby interface featuring immutable identifier objects and functional programming
-    principles. EPIN adds derivation markers to PIN that distinguish pieces by their style
-    origin, enabling cross-style game scenarios and piece origin tracking. Represents all
-    four Game Protocol piece attributes with full PIN backward compatibility. Perfect for
-    game engines, cross-tradition tournaments, and hybrid board game environments.
+    EPIN (Extended Piece Identifier Notation) implementation for Ruby.
+    Extends PIN by adding a derivation marker to track piece style in cross-style
+    abstract strategy board games with a minimal compositional API.
   DESC
 
   spec.homepage               = "https://github.com/sashite/epin.rb"
@@ -22,7 +18,7 @@ Gem::Specification.new do |spec|
   spec.files                  = ::Dir["LICENSE.md", "README.md", "lib/**/*"]
   spec.required_ruby_version  = ">= 3.2.0"
 
-  spec.add_dependency "sashite-pin", "~> 3.2.0"
+  spec.add_dependency "sashite-pin", "~> 3.3.0"
 
   spec.metadata = {
     "bug_tracker_uri"       => "https://github.com/sashite/epin.rb/issues",
