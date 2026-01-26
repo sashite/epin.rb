@@ -18,7 +18,7 @@ Gem::Specification.new do |spec|
   spec.files                  = ::Dir["LICENSE.md", "README.md", "lib/**/*"]
   spec.required_ruby_version  = ">= 3.2.0"
 
-  spec.add_dependency "sashite-pin", "~> 3.3.0"
+  spec.add_dependency "sashite-pin", "~> 4.1.0"
 
   spec.metadata = {
     "bug_tracker_uri"       => "https://github.com/sashite/epin.rb/issues",
