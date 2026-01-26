@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "sashite/pin"
+
 require_relative "constants"
 require_relative "errors"
 

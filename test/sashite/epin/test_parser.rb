@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require_relative "../../../lib/sashite/epin"
+require_relative "../../../lib/sashite/epin/parser"
 
 # Helper function to run a test and report errors
 def run_test(name)
@@ -12,7 +12,7 @@ rescue StandardError => e
   warn "✗ Failure: #{e.message}"
   warn "    #{e.backtrace.first}"
   exit(1)
-end
+end unless defined?(run_test)
 
 puts
 puts "=== Parser Tests ==="
@@ -422,13 +422,6 @@ run_test("round-trip derived EPIN") do
     )
     identifier = Sashite::Epin::Identifier.new(pin, derived: result[:derived])
     raise "round-trip failed for #{epin_string}" unless identifier.to_s == epin_string
-  end
-end
-
-run_test("round-trip via Epin.parse") do
-  %w[K +R K^ +K^'].each do |epin_string|
-    epin = Sashite::Epin.parse(epin_string)
-    raise "round-trip failed for #{epin_string}" unless epin.to_s == epin_string
   end
 end
 

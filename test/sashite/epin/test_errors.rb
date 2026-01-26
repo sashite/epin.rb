@@ -12,7 +12,7 @@ rescue StandardError => e
   warn "✗ Failure: #{e.message}"
   warn "    #{e.backtrace.first}"
   exit(1)
-end
+end unless defined?(run_test)
 
 puts
 puts "=== Errors Tests ==="

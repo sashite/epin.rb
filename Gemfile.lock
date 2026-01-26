@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    sashite-epin (2.2.0)
+    sashite-epin (2.2.1)
       sashite-pin (~> 4.1.0)
 
 GEM

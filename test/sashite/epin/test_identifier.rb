@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require_relative "../../../lib/sashite/epin"
+require_relative "../../../lib/sashite/epin/identifier"
 
 # Helper function to run a test and report errors
 def run_test(name)
@@ -12,7 +12,7 @@ rescue StandardError => e
   warn "✗ Failure: #{e.message}"
   warn "    #{e.backtrace.first}"
   exit(1)
-end
+end unless defined?(run_test)
 
 puts
 puts "=== Identifier Tests ==="
