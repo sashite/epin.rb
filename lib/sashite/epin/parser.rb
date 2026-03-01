@@ -4,40 +4,69 @@ require "sashite/pin"
 
 require_relative "constants"
 require_relative "errors"
+require_relative "identifier"
 
 module Sashite
   module Epin
     # Parser for EPIN (Extended Piece Identifier Notation) strings.
     #
-    # This parser extracts the derivation marker and delegates PIN parsing
-    # to the sashite-pin library.
+    # Dual-path architecture for performance:
+    # - {safe_parse}: core path — returns a cached Identifier or nil.
+    #   Never raises, never allocates exceptions, never captures backtraces.
+    # - {parse}: public API — delegates to safe_parse, raises once at boundary on failure.
+    # - {valid?}: boolean wrapper around safe_parse — never raises.
     #
     # @example
-    #   Parser.parse("K")    # => { pin: { abbr: :K, side: :first, ... }, derived: false }
-    #   Parser.parse("K^'")  # => { pin: { abbr: :K, side: :first, ..., terminal: true }, derived: true }
+    #   Parser.safe_parse("K^'")  # => #<Sashite::Epin::Identifier K^'>
+    #   Parser.safe_parse("bad")  # => nil
+    #   Parser.parse("K^'")      # => #<Sashite::Epin::Identifier K^'>
+    #   Parser.valid?("K^'")     # => true
     #
     # @see https://sashite.dev/specs/epin/1.0.0/
     module Parser
-      # Parses an EPIN string into its components.
+      # ASCII byte value of the derivation marker.
+      APOSTROPHE_BYTE = 39 # ' = 0x27
+
+      private_constant :APOSTROPHE_BYTE
+
+      # Parses an EPIN string without raising an exception.
+      # This is the core parsing path — all other methods delegate here.
       #
       # @param input [String] The EPIN string to parse
-      # @return [Hash] A hash with :pin (PIN components hash) and :derived keys
+      # @return [Identifier, nil] A cached Identifier on success, nil on failure
+      def self.safe_parse(input)
+        return nil unless ::String === input
+
+        len = input.bytesize
+        return nil if len == 0 || len > Constants::MAX_STRING_LENGTH
+
+        # Check derivation marker: single byte check on last position.
+        if input.getbyte(len - 1) == APOSTROPHE_BYTE
+          pin = ::Sashite::Pin.safe_parse(input.byteslice(0, len - 1))
+          return nil if pin.nil?
+
+          Identifier.fetch(pin, true)
+        else
+          pin = ::Sashite::Pin.safe_parse(input)
+          return nil if pin.nil?
+
+          Identifier.fetch(pin, false)
+        end
+      end
+
+      # Parses an EPIN string into a cached Identifier.
+      # Delegates to {safe_parse} for the happy path.
+      # On failure, performs detailed validation to raise a precise error.
+      #
+      # @param input [String] The EPIN string to parse
+      # @return [Identifier] A cached Identifier
       # @raise [Errors::Argument] If the input is not a valid EPIN string
       def self.parse(input)
-        validate_string!(input)
+        result = safe_parse(input)
+        return result unless result.nil?
 
-        derived = has_derivation_marker?(input)
-
-        if derived
-          validate_derivation_marker!(input)
-          pin_string = input.chop
-        else
-          pin_string = input
-        end
-
-        pin_components = parse_pin_component(pin_string)
-
-        { pin: pin_components, derived: derived }
+        # Slow path: detailed validation for precise error messages.
+        raise_parse_error!(input)
       end
 
       # Validates an EPIN string without raising an exception.
@@ -45,57 +74,45 @@ module Sashite
       # @param input [String] The EPIN string to validate
       # @return [Boolean] true if valid, false otherwise
       def self.valid?(input)
-        return false unless ::String === input
-
-        parse(input)
-        true
-      rescue Errors::Argument
-        false
+        !safe_parse(input).nil?
       end
 
       class << self
         private
 
-        # Validates that input is a String.
+        # Performs detailed validation on an already-known-invalid input
+        # to produce a precise error message.
         #
-        # @param input [Object] The input to validate
-        # @raise [Errors::Argument] If input is not a String
-        def validate_string!(input)
-          return if ::String === input
+        # @param input [Object] The invalid input
+        # @raise [Errors::Argument] Always raises with a descriptive message
+        def raise_parse_error!(input)
+          unless ::String === input
+            raise Errors::Argument, "invalid PIN component: must contain exactly one letter"
+          end
 
-          raise Errors::Argument, "invalid PIN component: must contain exactly one letter"
-        end
+          # Check derivation marker issues first.
+          if input.include?(Constants::DERIVATION_SUFFIX)
+            count = input.count(Constants::DERIVATION_SUFFIX)
 
-        # Checks if the input contains a derivation marker.
-        #
-        # @param input [String] The input to check
-        # @return [Boolean] true if contains derivation marker
-        def has_derivation_marker?(input)
-          input.include?(Constants::DERIVATION_SUFFIX)
-        end
+            unless count == 1 && input.getbyte(input.bytesize - 1) == APOSTROPHE_BYTE
+              raise Errors::Argument, Errors::Argument::Messages::INVALID_DERIVATION_MARKER
+            end
 
-        # Validates derivation marker position and uniqueness.
-        #
-        # @param input [String] The input to validate
-        # @raise [Errors::Argument] If derivation marker is invalid
-        def validate_derivation_marker!(input)
-          count = input.count(Constants::DERIVATION_SUFFIX)
-          last_char = input[-1]
+            pin_string = input.chop
+          else
+            pin_string = input
+          end
 
-          return if count == 1 && last_char == Constants::DERIVATION_SUFFIX
+          # Delegate to PIN's raising parser for a precise PIN error message.
+          begin
+            ::Sashite::Pin::Parser.parse(pin_string)
+          rescue ::Sashite::Pin::Errors::Argument => e
+            raise Errors::Argument, "invalid PIN component: #{e.message}"
+          end
 
-          raise Errors::Argument, Errors::Argument::Messages::INVALID_DERIVATION_MARKER
-        end
-
-        # Parses the PIN component using sashite-pin.
-        #
-        # @param pin_string [String] The PIN string to parse
-        # @return [Hash] PIN components hash
-        # @raise [Errors::Argument] If PIN parsing fails
-        def parse_pin_component(pin_string)
-          ::Sashite::Pin::Parser.parse(pin_string)
-        rescue ::Sashite::Pin::Errors::Argument => e
-          raise Errors::Argument, "invalid PIN component: #{e.message}"
+          # Unreachable in normal operation: if safe_parse returned nil,
+          # one of the checks above should have raised. Guard against edge cases.
+          raise Errors::Argument, "invalid EPIN token"
         end
       end
     end

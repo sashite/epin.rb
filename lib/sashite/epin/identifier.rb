@@ -13,16 +13,19 @@ module Sashite
     # - PIN: encodes abbr, side, state, and terminal status
     # - Derived: indicates whether the piece uses native or derived style
     #
-    # Instances are immutable (frozen after creation).
+    # All 624 possible instances (312 PIN tokens × 2 derivation statuses) are
+    # pre-instantiated and frozen at load time. Parsing, fetching, and all
+    # transformation methods return these cached instances via hash lookup —
+    # no Identifier is ever allocated after the module loads.
     #
-    # @example Creating identifiers
+    # @example Access via module methods (recommended)
+    #   epin = Sashite::Epin.parse("K^'")
+    #   epin = Sashite::Epin.fetch(pin, derived: true)
+    #
+    # @example Direct construction (mainly for tests / pool building)
     #   pin = Sashite::Pin.parse("K^")
     #   epin = Identifier.new(pin)
     #   epin = Identifier.new(pin, derived: true)
-    #
-    # @example String conversion
-    #   Identifier.new(pin).to_s                  # => "K^"
-    #   Identifier.new(pin, derived: true).to_s   # => "K^'"
     #
     # @see https://sashite.dev/specs/epin/1.0.0/
     class Identifier
@@ -41,11 +44,13 @@ module Sashite
       #   Identifier.new(pin)
       #   Identifier.new(pin, derived: true)
       def initialize(pin, derived: false)
-        validate_pin!(pin)
-        validate_derived!(derived)
+        raise Errors::Argument, Errors::Argument::Messages::INVALID_PIN unless ::Sashite::Pin::Identifier === pin
+        raise Errors::Argument, Errors::Argument::Messages::INVALID_DERIVED unless true == derived || false == derived
 
         @pin = pin
         @derived = derived
+        @string = (derived ? "#{pin}#{Constants::DERIVATION_SUFFIX}" : pin.to_s).freeze
+        @hash = (pin.hash ^ (derived ? 1 : 0).hash).freeze
 
         freeze
       end
@@ -77,6 +82,7 @@ module Sashite
       # ========================================================================
 
       # Returns the EPIN string representation.
+      # Pre-computed at construction time — zero allocation.
       #
       # @return [String] The EPIN string
       #
@@ -84,53 +90,55 @@ module Sashite
       #   Identifier.new(pin).to_s                  # => "K^"
       #   Identifier.new(pin, derived: true).to_s   # => "K^'"
       def to_s
-        derived? ? "#{pin}#{Constants::DERIVATION_SUFFIX}" : pin.to_s
+        @string
       end
 
       # ========================================================================
-      # Transformations
+      # Transformations (pool lookups — zero allocation)
       # ========================================================================
 
-      # Returns a new Identifier with a different PIN component.
+      # Returns a cached Identifier with a different PIN component.
       #
       # @param new_pin [Sashite::Pin::Identifier] The new PIN component
-      # @return [Identifier] A new Identifier with the specified PIN
+      # @return [Identifier] A cached Identifier with the specified PIN
       # @raise [Errors::Argument] If the PIN is invalid
       #
       # @example
-      #   epin = Identifier.new(pin, derived: true)
+      #   epin = Sashite::Epin.parse("K^'")
       #   new_pin = Sashite::Pin.parse("+Q^")
       #   epin.with_pin(new_pin).to_s  # => "+Q^'"
       def with_pin(new_pin)
-        return self if pin == new_pin
+        return self if pin.equal?(new_pin)
 
-        self.class.new(new_pin, derived: @derived)
+        raise Errors::Argument, Errors::Argument::Messages::INVALID_PIN unless ::Sashite::Pin::Identifier === new_pin
+
+        self.class.fetch(new_pin, @derived)
       end
 
-      # Returns a new Identifier marked as derived.
+      # Returns a cached Identifier marked as derived.
       #
-      # @return [Identifier] A new Identifier with derived: true
+      # @return [Identifier] A cached Identifier with derived: true
       #
       # @example
-      #   epin = Identifier.new(pin)
+      #   epin = Sashite::Epin.parse("K^")
       #   epin.derive.to_s  # => "K^'"
       def derive
-        return self if derived?
+        return self if @derived
 
-        self.class.new(pin, derived: true)
+        self.class.fetch(pin, true)
       end
 
-      # Returns a new Identifier marked as native.
+      # Returns a cached Identifier marked as native.
       #
-      # @return [Identifier] A new Identifier with derived: false
+      # @return [Identifier] A cached Identifier with derived: false
       #
       # @example
-      #   epin = Identifier.new(pin, derived: true)
+      #   epin = Sashite::Epin.parse("K^'")
       #   epin.native.to_s  # => "K^"
       def native
-        return self if native?
+        return self if !@derived
 
-        self.class.new(pin, derived: false)
+        self.class.fetch(pin, false)
       end
 
       # ========================================================================
@@ -143,8 +151,8 @@ module Sashite
       # @return [Boolean] true if same derived status
       #
       # @example
-      #   epin1 = Identifier.new(pin1, derived: true)
-      #   epin2 = Identifier.new(pin2, derived: true)
+      #   epin1 = Sashite::Epin.parse("K'")
+      #   epin2 = Sashite::Epin.parse("Q'")
       #   epin1.same_derived?(epin2)  # => true
       def same_derived?(other)
         @derived == other.derived?
@@ -166,11 +174,11 @@ module Sashite
 
       alias eql? ==
 
-      # Returns a hash code for the Identifier.
+      # Returns a pre-computed hash code for the Identifier.
       #
       # @return [Integer] Hash code
       def hash
-        [pin, @derived].hash
+        @hash
       end
 
       # Returns an inspect string for the Identifier.
@@ -180,23 +188,43 @@ module Sashite
         "#<#{self.class} #{self}>"
       end
 
-      private
-
       # ========================================================================
-      # Private Validation
+      # Flyweight Pool (class-level)
       # ========================================================================
 
-      def validate_pin!(pin)
-        return if ::Sashite::Pin::Identifier === pin
-
-        raise Errors::Argument, Errors::Argument::Messages::INVALID_PIN
+      class << self
+        # Retrieves a cached Identifier from the flyweight pool.
+        # Direct hash lookup — no validation, no allocation.
+        #
+        # @param pin [Sashite::Pin::Identifier] PIN component (must be from PIN's pool)
+        # @param derived [Boolean] Derived status
+        # @return [Identifier] A cached Identifier
+        # @api private
+        def fetch(pin, derived)
+          derived ? @derived_pool[pin] : @native_pool[pin]
+        end
       end
 
-      def validate_derived!(derived)
-        return if ::TrueClass === derived || ::FalseClass === derived
+      # Build the flyweight pool at load time.
+      # Two separate hashes (native/derived) keyed by PIN instance
+      # for single-lookup access with no Array allocation for the key.
+      @native_pool = {}
+      @derived_pool = {}
 
-        raise Errors::Argument, Errors::Argument::Messages::INVALID_DERIVED
+      ::Sashite::Pin::Constants::VALID_ABBRS.each do |abbr|
+        ::Sashite::Pin::Constants::VALID_SIDES.each do |side|
+          ::Sashite::Pin::Constants::VALID_STATES.each do |state|
+            [false, true].each do |terminal|
+              pin = ::Sashite::Pin.fetch(abbr, side, state, terminal: terminal)
+              @native_pool[pin]  = new(pin, derived: false)
+              @derived_pool[pin] = new(pin, derived: true)
+            end
+          end
+        end
       end
+
+      @native_pool.freeze
+      @derived_pool.freeze
     end
   end
 end
